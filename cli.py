@@ -1,10 +1,14 @@
 from ast import literal_eval
+import os.path
 import pandas as pd
 
-accepted_commands = {"exit", "filter", "help", "stats", "view"}
+accepted_commands = {"exit", "filter", "help", "load", "refresh", "save", "stats", "view"}
 
-def cli_run(df: pd.DataFrame):
-    parse_data(df)
+def cli_run(raw_df: pd.DataFrame):
+    """Creates and runs basic CLI to access, filter and save/load movie data."""
+
+    parse_data(raw_df)
+    filtered_df = raw_df
 
     while(True):
         command = input("What would you like to do?: ").lower()
@@ -12,32 +16,58 @@ def cli_run(df: pd.DataFrame):
             if command == "exit":
                 break
             else:
-                process_command(command, df)
+                response_df = process_command(command, raw_df, filtered_df)
+                if command == "load":
+                    if not response_df is None:
+                        raw_df = pd.concat([raw_df, response_df], ignore_index=True)
+                        raw_df = raw_df.drop_duplicates(subset=['title'])
+
+                        filtered_df = pd.concat([filtered_df, response_df], ignore_index=True)
+                        filtered_df = filtered_df.drop_duplicates(subset=['title'])
+                else:
+                    filtered_df = response_df
         else:
             print("Invalid command, please try again.")
 
 def parse_data(df: pd.DataFrame):
+    """Parses raw data into useable data for later filtering. WILL EDIT PARAM DataFrame! Does not return."""
+
     df['genres_parsed'] = df['genres'].apply(lambda x: literal_eval(x) if isinstance(x, str) and x.strip() else [])
     df['genre_list'] = df['genres_parsed'].apply(lambda x: [d['name'] for d in x] if isinstance(x, list) and x else [None])
-    df.drop('genres_parsed', axis='columns')
+    df = df.drop('genres_parsed', axis='columns')
 
-def process_command(command, df: pd.DataFrame):
+def process_command(command, raw_df: pd.DataFrame, filtered_df: pd.DataFrame):
+    """Recieves and processes various command line commands."""
+
     match command:
         case "filter":
-            filter_command(df)
+            return filter_command(raw_df)
         case "help":
             help_command()
+        case "load":
+            return load_command()
+        case "refresh":
+            return refresh_command(raw_df)
+        case "save":
+            save_command(filtered_df)
         case "stats":
-            stats_command(df)
+            stats_command(filtered_df)
         case "view":
-            view_command(df)
+            view_command(filtered_df)
+        
+    return filtered_df
 
 def filter_command(df: pd.DataFrame):
+    """Filters incoming DataFrame based on user input and returns the result."""
 
     def get_genres():
+        """Returns user input genres."""
+
         return str(input("Enter genre: ")).title().split()
     
     def get_ratings():
+        """Returns user input min and max ratings."""
+
         while(True):
             try:
                 rating_min = float(input("Enter minimum rating: "))
@@ -78,11 +108,14 @@ def filter_command(df: pd.DataFrame):
             df['genre_list'].apply(lambda x: any(g in x for g in genres))]
     else:
         print("Invalid filter. Please try again.")
-        return
+        return df
     
     view_command(filtered_df)
+    return filtered_df
 
 def help_command():
+    """Dynamically outputs valid CLI commands."""
+
     string = "Use any of the following commands: "
     for index, command in enumerate(sorted(accepted_commands)):
         string += command
@@ -90,9 +123,74 @@ def help_command():
             string += ", "
     print(string)
 
+def load_command():
+    """Returns loaded data from valid CSV/JSON file based on user input."""
+
+    def check_file_exists(name):
+        if os.path.isfile(name):
+            return True
+        else:
+            print("That is not a valid file. Please try again.")
+            return False
+
+    filename = str(input("Enter file name: "))
+    file_type = str(input("Enter file type to save. ('csv' or 'json'): ")).lower()
+
+    if file_type in ('csv', 'c'):
+        filename += '.csv'
+        if check_file_exists(filename):
+            df = pd.read_csv(filename)
+            df['genre_list'] = df['genre_list'].apply(lambda x: literal_eval(x) if isinstance(x, str) and x.strip() else [])
+        else:
+            return None
+    elif file_type in ('json', 'j'):
+        filename += '.json'
+        if check_file_exists(filename):
+            df = pd.read_json(filename)
+        else:
+            return None
+    else:
+        print('Invalid file type. Please try again.')
+        return None
+
+    return df
+
+def refresh_command(raw_df: pd.DataFrame):
+    """Placeholder for more involved refresh command if needed. Currently just returns input df."""
+
+    return raw_df
+
+def save_command(df: pd.DataFrame):
+    """Saves to valid CSV/JSON file based on user input."""
+
+    def check_if_overwrite(name):
+        if os.path.isfile(name):
+            if not str(input("Would you like to overwrite this file? ('y'/'n'): ")).lower() == 'y':
+                print("Please try again.")
+                return False
+        return True
+
+    filename = str(input("Enter file name: "))
+    file_type = str(input("Enter file type to save. ('csv' or 'json'): ")).lower()
+
+    if file_type in ('csv', 'c'):
+        filename += '.csv'
+        if check_if_overwrite(filename):
+            df.to_csv(filename)
+    elif file_type in ('json', 'j'):
+        filename += '.json'
+        if check_if_overwrite(filename):
+            df.to_json(filename)
+    else:
+        print('Invalid file type. Please try again.')
+        
 def stats_command(df: pd.DataFrame):
+    """Prints basic data set stats."""
+
     print("\nMean vote average: ", df['vote_average'].mean())
     print("Total vote averages: ", df['vote_average'].count(), "\n")
 
 def view_command(df: pd.DataFrame):
+    """Prints dataset data in an easy to read way."""
+
     print("\n", df[['title', 'genre_list', 'vote_average']].head(n=len(df)), "\n")
