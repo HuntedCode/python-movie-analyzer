@@ -7,7 +7,7 @@ accepted_commands = {"exit", "filter", "help", "load", "refresh", "save", "stats
 def cli_run(raw_df: pd.DataFrame):
     """Creates and runs basic CLI to access, filter and save/load movie data."""
 
-    parse_data(raw_df)
+    raw_df = parse_data(raw_df)
     filtered_df = raw_df
 
     while(True):
@@ -30,11 +30,11 @@ def cli_run(raw_df: pd.DataFrame):
             print("Invalid command, please try again.")
 
 def parse_data(df: pd.DataFrame):
-    """Parses raw data into useable data for later filtering. WILL EDIT PARAM DataFrame! Does not return."""
+    """Parses raw data into useable data for later filtering."""
 
     df['genres_parsed'] = df['genres'].apply(lambda x: literal_eval(x) if isinstance(x, str) and x.strip() else [])
     df['genre_list'] = df['genres_parsed'].apply(lambda x: [d['name'] for d in x] if isinstance(x, list) and x else [None])
-    df = df.drop('genres_parsed', axis='columns')
+    return df.drop(['genres', 'genres_parsed'], axis='columns')
 
 def process_command(command, raw_df: pd.DataFrame, filtered_df: pd.DataFrame):
     """Recieves and processes various command line commands."""
@@ -185,12 +185,14 @@ def save_command(df: pd.DataFrame):
         print('Invalid file type. Please try again.')
         
 def stats_command(df: pd.DataFrame):
-    """Prints basic data set stats."""
+    """Prints basic genre and rating stats from incoming dataset."""
 
-    print("\nMean vote average: ", df['vote_average'].mean())
-    print("Total vote averages: ", df['vote_average'].count(), "\n")
+    flat = df.explode('genre_list')
+    genre_counts = flat.groupby('genre_list').size()
+    genre_means = flat.groupby('genre_list')['vote_average'].mean()
+    print("\n", pd.DataFrame({'Count': genre_counts, 'Avg Rating': genre_means}), "\n")
 
 def view_command(df: pd.DataFrame):
-    """Prints dataset data in an easy to read way."""
+    """Prints dataset in an easy to read way."""
 
     print("\n", df[['title', 'genre_list', 'vote_average']].head(n=len(df)), "\n")
