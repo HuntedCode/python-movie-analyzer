@@ -5,7 +5,7 @@ import pandas as pd
 
 accepted_commands = {"exit", "filter", "help", "load", "plot", "refresh", "save", "stats", "view"}
 
-def cli_run(raw_df: pd.DataFrame):
+def cli_run(raw_df: pd.DataFrame) -> None:
     """Creates and runs basic CLI to access, filter and save/load movie data."""
 
     raw_df = parse_data(raw_df)
@@ -30,14 +30,14 @@ def cli_run(raw_df: pd.DataFrame):
         else:
             print("Invalid command, please try again.")
 
-def parse_data(df: pd.DataFrame):
+def parse_data(df: pd.DataFrame) -> pd.DataFrame:
     """Parses raw data into useable data for later filtering."""
 
     df['genres_parsed'] = df['genres'].apply(lambda x: literal_eval(x) if isinstance(x, str) and x.strip() else [])
     df['genre_list'] = df['genres_parsed'].apply(lambda x: [d['name'] for d in x] if isinstance(x, list) and x else [None])
     return df.drop(['genres', 'genres_parsed'], axis='columns')
 
-def process_command(command, raw_df: pd.DataFrame, filtered_df: pd.DataFrame):
+def process_command(command, raw_df: pd.DataFrame, filtered_df: pd.DataFrame) -> pd.DataFrame:
     """Recieves and processes various command line commands."""
 
     match command:
@@ -60,7 +60,7 @@ def process_command(command, raw_df: pd.DataFrame, filtered_df: pd.DataFrame):
         
     return filtered_df
 
-def filter_command(df: pd.DataFrame):
+def filter_command(df: pd.DataFrame) -> pd.DataFrame:
     """Filters incoming DataFrame based on user input and returns the result."""
 
     def get_genres():
@@ -116,7 +116,7 @@ def filter_command(df: pd.DataFrame):
     view_command(filtered_df)
     return filtered_df
 
-def help_command():
+def help_command() -> None:
     """Dynamically outputs valid CLI commands."""
 
     string = "Use any of the following commands: "
@@ -126,7 +126,7 @@ def help_command():
             string += ", "
     print(string)
 
-def load_command():
+def load_command() -> pd.DataFrame:
     """Returns loaded data from valid CSV/JSON file based on user input."""
 
     def check_file_exists(name):
@@ -160,8 +160,9 @@ def load_command():
         return df
     except pd.errors.ParserError:
         print("Error reading file. Check file integrity and try again.")
+        return None
 
-def plot_command(df: pd.DataFrame):
+def plot_command(df: pd.DataFrame) -> None:
     ax = df.explode('genre_list').groupby('genre_list').size().plot(kind="bar")
     ax.set_title("Genre Counts")
     ax.set_xlabel("Genre")
@@ -171,12 +172,12 @@ def plot_command(df: pd.DataFrame):
     plt.savefig('genres.png')
     print("Plot image saved successfully: genres.png")
 
-def refresh_command(raw_df: pd.DataFrame):
+def refresh_command(raw_df: pd.DataFrame) -> pd.DataFrame:
     """Placeholder for more involved refresh command if needed. Currently just returns input df."""
 
     return raw_df
 
-def save_command(df: pd.DataFrame):
+def save_command(df: pd.DataFrame) -> None:
     """Saves to valid CSV/JSON file based on user input."""
 
     def check_if_overwrite(name):
@@ -200,7 +201,7 @@ def save_command(df: pd.DataFrame):
     else:
         print('Invalid file type. Please try again.')
         
-def stats_command(df: pd.DataFrame):
+def stats_command(df: pd.DataFrame) -> None:
     """Prints basic genre and rating stats from incoming dataset."""
 
     flat = df.explode('genre_list')
@@ -208,7 +209,7 @@ def stats_command(df: pd.DataFrame):
     genre_means = flat.groupby('genre_list')['vote_average'].mean()
     print("\n", pd.DataFrame({'Count': genre_counts, 'Avg Rating': genre_means}), "\n")
 
-def view_command(df: pd.DataFrame):
+def view_command(df: pd.DataFrame) -> None:
     """Prints dataset in an easy to read way."""
 
     print("\n", df[['title', 'genre_list', 'vote_average']].head(n=len(df)), "\n")
