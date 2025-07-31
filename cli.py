@@ -1,8 +1,9 @@
 from ast import literal_eval
+import matplotlib.pyplot as plt
 import os.path
 import pandas as pd
 
-accepted_commands = {"exit", "filter", "help", "load", "refresh", "save", "stats", "view"}
+accepted_commands = {"exit", "filter", "help", "load", "plot", "refresh", "save", "stats", "view"}
 
 def cli_run(raw_df: pd.DataFrame):
     """Creates and runs basic CLI to access, filter and save/load movie data."""
@@ -46,6 +47,8 @@ def process_command(command, raw_df: pd.DataFrame, filtered_df: pd.DataFrame):
             help_command()
         case "load":
             return load_command()
+        case "plot":
+            plot_command(filtered_df)
         case "refresh":
             return refresh_command(raw_df)
         case "save":
@@ -136,24 +139,37 @@ def load_command():
     filename = str(input("Enter file name: "))
     file_type = str(input("Enter file type to save. ('csv' or 'json'): ")).lower()
 
-    if file_type in ('csv', 'c'):
-        filename += '.csv'
-        if check_file_exists(filename):
-            df = pd.read_csv(filename)
-            df['genre_list'] = df['genre_list'].apply(lambda x: literal_eval(x) if isinstance(x, str) and x.strip() else [])
+    try:
+        if file_type in ('csv', 'c'):
+            filename += '.csv'
+            if check_file_exists(filename):
+                df = pd.read_csv(filename)
+                df['genre_list'] = df['genre_list'].apply(lambda x: literal_eval(x) if isinstance(x, str) and x.strip() else [])
+            else:
+                return None
+        elif file_type in ('json', 'j'):
+            filename += '.json'
+            if check_file_exists(filename):
+                df = pd.read_json(filename)
+            else:
+                return None
         else:
+            print('Invalid file type. Please try again.')
             return None
-    elif file_type in ('json', 'j'):
-        filename += '.json'
-        if check_file_exists(filename):
-            df = pd.read_json(filename)
-        else:
-            return None
-    else:
-        print('Invalid file type. Please try again.')
-        return None
 
-    return df
+        return df
+    except pd.errors.ParserError:
+        print("Error reading file. Check file integrity and try again.")
+
+def plot_command(df: pd.DataFrame):
+    ax = df.explode('genre_list').groupby('genre_list').size().plot(kind="bar")
+    ax.set_title("Genre Counts")
+    ax.set_xlabel("Genre")
+    ax.set_ylabel("Count")
+    plt.tight_layout()
+
+    plt.savefig('genres.png')
+    print("Plot image saved successfully: genres.png")
 
 def refresh_command(raw_df: pd.DataFrame):
     """Placeholder for more involved refresh command if needed. Currently just returns input df."""
