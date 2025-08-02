@@ -1,14 +1,15 @@
 from ast import literal_eval
+from db import Database
 import matplotlib.pyplot as plt
 import os.path
 import pandas as pd
 
 accepted_commands = {"exit", "filter", "help", "load", "plot", "refresh", "save", "stats", "view"}
 
-def cli_run(raw_df: pd.DataFrame) -> None:
+def cli_run(db: Database) -> None:
     """Creates and runs basic CLI to access, filter and save/load movie data."""
 
-    raw_df = parse_data(raw_df)
+    raw_df = parse_data(db.query_db())
     filtered_df = raw_df
 
     while(True):
@@ -17,7 +18,7 @@ def cli_run(raw_df: pd.DataFrame) -> None:
             if command == "exit":
                 break
             else:
-                response_df = process_command(command, raw_df, filtered_df)
+                response_df = process_command(command, db, raw_df, filtered_df)
                 if command == "load":
                     if not response_df is None:
                         raw_df = pd.concat([raw_df, response_df], ignore_index=True)
@@ -37,12 +38,12 @@ def parse_data(df: pd.DataFrame) -> pd.DataFrame:
     df['genre_list'] = df['genres_parsed'].apply(lambda x: [d['name'] for d in x] if isinstance(x, list) and x else [None])
     return df.drop(['genres', 'genres_parsed'], axis='columns')
 
-def process_command(command, raw_df: pd.DataFrame, filtered_df: pd.DataFrame) -> pd.DataFrame:
+def process_command(command, db: Database, raw_df: pd.DataFrame, filtered_df: pd.DataFrame) -> pd.DataFrame:
     """Recieves and processes various command line commands."""
 
     match command:
         case "filter":
-            return filter_command(raw_df)
+            return filter_command(db)
         case "help":
             help_command()
         case "load":
@@ -60,7 +61,7 @@ def process_command(command, raw_df: pd.DataFrame, filtered_df: pd.DataFrame) ->
         
     return filtered_df
 
-def filter_command(df: pd.DataFrame) -> pd.DataFrame:
+def filter_command(db: Database) -> pd.DataFrame:
     """Filters incoming DataFrame based on user input and returns the result."""
 
     def get_genres():
@@ -96,25 +97,33 @@ def filter_command(df: pd.DataFrame) -> pd.DataFrame:
 
     type = str(input("What would you like to filter? ('genre', 'rating' or 'both'): ")).lower()
 
-    if type in ('genre', 'g'):
+    query_str = "SELECT * FROM movies WHERE ("
+    params = []
+
+    if type in ('genre', 'g', 'both', 'b'):
         genres = get_genres()
-        filtered_df = df[df['genre_list'].apply(lambda x: any(g in x for g in genres))]
-    elif type in ('rating', 'r'):
+        pos = -1
+        for g in genres:
+            pos += 1
+            query_str += "genres LIKE '%' || ? || '%'"
+            params.append(g)
+            if pos < len(genres) - 1:
+                query_str += " OR "
+            else:
+                query_str += ")"
+        
+        if type in ('both', 'b'):
+            query_str += " AND ("
+
+    if type in ('rating', 'r', 'both', 'b'):
         rating_min, rating_max = get_ratings()
-        filtered_df = df[(df['vote_average'] >= rating_min) & (df['vote_average'] <= rating_max)]
-    elif type in ('both', 'b'):
-        genres = get_genres()
-        rating_min, rating_max = get_ratings()
-        filtered_df = df[
-            (df['vote_average'] >= rating_min) & 
-            (df['vote_average'] <= rating_max) &
-            df['genre_list'].apply(lambda x: any(g in x for g in genres))]
-    else:
-        print("Invalid filter. Please try again.")
-        return df
+        query_str += "vote_average BETWEEN ? AND ?)"
+        params.append(rating_min)
+        params.append(rating_max)
     
-    view_command(filtered_df)
-    return filtered_df
+    df = parse_data(db.query_db_with_params(query_str, params))
+    view_command(df)
+    return df
 
 def help_command() -> None:
     """Dynamically outputs valid CLI commands."""
