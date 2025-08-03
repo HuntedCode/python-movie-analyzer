@@ -1,16 +1,14 @@
-from ast import literal_eval
 from db import Database
 import matplotlib.pyplot as plt
 import os.path
 import pandas as pd
 
-accepted_commands = {"exit", "filter", "help", "load", "plot", "refresh", "save", "stats", "view"}
+accepted_commands = {"exit", "filter", "help", "plot", "ratings", "refresh", "save", "stats", "view"}
 
 def cli_run(db: Database) -> None:
     """Creates and runs basic CLI to access, filter and save/load movie data."""
 
-    raw_df = parse_data(db.query_db())
-    filtered_df = raw_df
+    cache_df = db.query_db()
 
     while(True):
         command = input("What would you like to do?: ").lower()
@@ -18,27 +16,11 @@ def cli_run(db: Database) -> None:
             if command == "exit":
                 break
             else:
-                response_df = process_command(command, db, raw_df, filtered_df)
-                if command == "load":
-                    if not response_df is None:
-                        raw_df = pd.concat([raw_df, response_df], ignore_index=True)
-                        raw_df = raw_df.drop_duplicates(subset=['title'])
-
-                        filtered_df = pd.concat([filtered_df, response_df], ignore_index=True)
-                        filtered_df = filtered_df.drop_duplicates(subset=['title'])
-                else:
-                    filtered_df = response_df
+                cache_df = process_command(command, db, cache_df)
         else:
             print("Invalid command, please try again.")
 
-def parse_data(df: pd.DataFrame) -> pd.DataFrame:
-    """Parses raw data into useable data for later filtering."""
-
-    df['genres_parsed'] = df['genres'].apply(lambda x: literal_eval(x) if isinstance(x, str) and x.strip() else [])
-    df['genre_list'] = df['genres_parsed'].apply(lambda x: [d['name'] for d in x] if isinstance(x, list) and x else [None])
-    return df.drop(['genres', 'genres_parsed'], axis='columns')
-
-def process_command(command, db: Database, raw_df: pd.DataFrame, filtered_df: pd.DataFrame) -> pd.DataFrame:
+def process_command(command, db: Database, cache_df: pd.DataFrame) -> pd.DataFrame:
     """Recieves and processes various command line commands."""
 
     match command:
@@ -46,20 +28,20 @@ def process_command(command, db: Database, raw_df: pd.DataFrame, filtered_df: pd
             return filter_command(db)
         case "help":
             help_command()
-        case "load":
-            return load_command()
         case "plot":
-            plot_command(filtered_df)
+            plot_command(db, cache_df)
+        case "ratings":
+            ratings_command(db)
         case "refresh":
-            return refresh_command(raw_df)
+            return refresh_command(db)
         case "save":
-            save_command(filtered_df)
+            save_command(cache_df)
         case "stats":
-            stats_command(filtered_df)
+            stats_command(db, cache_df)
         case "view":
-            view_command(filtered_df)
+            view_command(cache_df)
         
-    return filtered_df
+    return cache_df
 
 def filter_command(db: Database) -> pd.DataFrame:
     """Filters incoming DataFrame based on user input and returns the result."""
@@ -97,15 +79,16 @@ def filter_command(db: Database) -> pd.DataFrame:
 
     type = str(input("What would you like to filter? ('genre', 'rating' or 'both'): ")).lower()
 
-    query_str = "SELECT * FROM movies WHERE ("
+    query_str = "SELECT * FROM movies WHERE EXISTS ("
     params = []
 
     if type in ('genre', 'g', 'both', 'b'):
         genres = get_genres()
+        query_str += "SELECT 1 FROM json_each(genres) WHERE "
         pos = -1
         for g in genres:
             pos += 1
-            query_str += "genres LIKE '%' || ? || '%'"
+            query_str += "value = ?"
             params.append(g)
             if pos < len(genres) - 1:
                 query_str += " OR "
@@ -121,9 +104,13 @@ def filter_command(db: Database) -> pd.DataFrame:
         params.append(rating_min)
         params.append(rating_max)
     
-    df = parse_data(db.query_db_with_params(query_str, params))
-    view_command(df)
-    return df
+    if len(params) >= 1:
+        df = db.query_db_with_params(query_str, params)
+        view_command(df)
+        return df
+    else:
+        print("That is not a valid command, please try again.")
+        return refresh_command(db)
 
 def help_command() -> None:
     """Dynamically outputs valid CLI commands."""
@@ -135,44 +122,18 @@ def help_command() -> None:
             string += ", "
     print(string)
 
-def load_command() -> pd.DataFrame:
-    """Returns loaded data from valid CSV/JSON file based on user input."""
+def plot_command(db: Database, cache_df: pd.DataFrame) -> None:
+    input_str = str(input("Use filtered data (f) or full dataset (full)? "))
 
-    def check_file_exists(name):
-        if os.path.isfile(name):
-            return True
-        else:
-            print("That is not a valid file. Please try again.")
-            return False
+    if input_str == 'f':
+        ax = cache_df.explode('genres').groupby('genres').size().plot(kind="bar")
+    elif input_str == 'full':
+        query_str = "SELECT value AS genre, COUNT(*) AS count FROM movies, json_each(genres) GROUP BY value"
+        ax = db.query_db(query_str).plot(kind="bar", x='genre', y='count')
+    else:
+        print("That is not a valid command. Please try again!")
+        return
 
-    filename = str(input("Enter file name: "))
-    file_type = str(input("Enter file type to save. ('csv' or 'json'): ")).lower()
-
-    try:
-        if file_type in ('csv', 'c'):
-            filename += '.csv'
-            if check_file_exists(filename):
-                df = pd.read_csv(filename)
-                df['genre_list'] = df['genre_list'].apply(lambda x: literal_eval(x) if isinstance(x, str) and x.strip() else [])
-            else:
-                return None
-        elif file_type in ('json', 'j'):
-            filename += '.json'
-            if check_file_exists(filename):
-                df = pd.read_json(filename)
-            else:
-                return None
-        else:
-            print('Invalid file type. Please try again.')
-            return None
-
-        return df
-    except pd.errors.ParserError:
-        print("Error reading file. Check file integrity and try again.")
-        return None
-
-def plot_command(df: pd.DataFrame) -> None:
-    ax = df.explode('genre_list').groupby('genre_list').size().plot(kind="bar")
     ax.set_title("Genre Counts")
     ax.set_xlabel("Genre")
     ax.set_ylabel("Count")
@@ -181,10 +142,30 @@ def plot_command(df: pd.DataFrame) -> None:
     plt.savefig('genres.png')
     print("Plot image saved successfully: genres.png")
 
-def refresh_command(raw_df: pd.DataFrame) -> pd.DataFrame:
+def ratings_command(db: Database) -> None:
+    print("Get user ratings for specified movie.")
+
+    try:
+        movie_id = int(input("Enter movie id: "))
+    except ValueError:
+        print("That is not a valid movie id! Must be an integer.")
+        return
+
+    sql, params = db.ratings_query_builder(movie_id=movie_id)
+    df = db.query_db_with_params(sql, params, 0)
+    title = df['title'].iloc[0]
+    genres = df['genres'].iloc[0]
+    average = df['rating'].mean()
+
+    print("User ratings (0.0 - 5.0) for:")
+    print(f"\nTitle: {title} | Genres: {genres}\n")
+    print(df[['userId', 'rating']])
+    print(f"\nAvearge rating: {average}")
+
+def refresh_command(db: Database) -> pd.DataFrame:
     """Placeholder for more involved refresh command if needed. Currently just returns input df."""
 
-    return raw_df
+    return db.query_db()
 
 def save_command(df: pd.DataFrame) -> None:
     """Saves to valid CSV/JSON file based on user input."""
@@ -210,15 +191,23 @@ def save_command(df: pd.DataFrame) -> None:
     else:
         print('Invalid file type. Please try again.')
         
-def stats_command(df: pd.DataFrame) -> None:
+def stats_command(db: Database, cache_df: pd.DataFrame) -> None:
     """Prints basic genre and rating stats from incoming dataset."""
 
-    flat = df.explode('genre_list')
-    genre_counts = flat.groupby('genre_list').size()
-    genre_means = flat.groupby('genre_list')['vote_average'].mean()
-    print("\n", pd.DataFrame({'Count': genre_counts, 'Avg Rating': genre_means}), "\n")
+    input_str = str(input("Use filtered data (f) or full dataset (full)? "))
+    if input_str == 'f':
+        flat = cache_df.explode('genres')
+        genre_counts = flat.groupby('genres').size()
+        genre_means = flat.groupby('genres')['vote_average'].mean()
+        print("\n", pd.DataFrame({'Count': genre_counts, 'Avg Rating': genre_means}), "\n")
+    elif input_str == "full":
+        query_str = "SELECT value AS genre, COUNT(*) AS count, AVG(vote_average) as avg FROM movies, json_each(genres) GROUP BY value"
+        cache_df = db.query_db(query_str)
+        print(cache_df)
+    else:
+        print("That is not a valid command. Please try again.")
 
 def view_command(df: pd.DataFrame) -> None:
     """Prints dataset in an easy to read way."""
 
-    print("\n", df[['title', 'genre_list', 'vote_average']].head(n=len(df)), "\n")
+    print("\n", df, "\n")

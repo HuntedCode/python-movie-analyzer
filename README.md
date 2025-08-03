@@ -13,7 +13,7 @@ A command-line tool for analyzing movie data from a Kaggle dataset, allowing use
 ## Installation
 1. Clone the repository:
    ```bash
-   git clone https://github.com/HuntedCode/movie-analyzer.git
+   git clone https://github.com/HuntedCode/python-movie-analyzer.git
    cd movie-analyzer
    ```
 2. Install dependencies (Python 3.8+ required):
