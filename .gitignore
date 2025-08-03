@@ -2,3 +2,4 @@ __pycache__/
 /movies_metadata.csv
 /ratings.csv
 /movies.db
+/genres.png

@@ -128,8 +128,7 @@ def plot_command(db: Database, cache_df: pd.DataFrame) -> None:
     if input_str == 'f':
         ax = cache_df.explode('genres').groupby('genres').size().plot(kind="bar")
     elif input_str == 'full':
-        query_str = "SELECT value AS genre, COUNT(*) AS count FROM movies, json_each(genres) GROUP BY value"
-        ax = db.query_db(query_str).plot(kind="bar", x='genre', y='count')
+        ax = db.genre_stats_query().plot(kind="bar", x='genre', y='count')
     else:
         print("That is not a valid command. Please try again!")
         return
@@ -146,21 +145,25 @@ def ratings_command(db: Database) -> None:
     print("Get user ratings for specified movie.")
 
     try:
-        movie_id = int(input("Enter movie id: "))
+        movie_id = input("Enter movie id: ")
     except ValueError:
-        print("That is not a valid movie id! Must be an integer.")
+        print("That is not a valid movie id!")
         return
 
-    sql, params = db.ratings_query_builder(movie_id=movie_id)
-    df = db.query_db_with_params(sql, params, 0)
-    title = df['title'].iloc[0]
-    genres = df['genres'].iloc[0]
-    average = df['rating'].mean()
+    df = db.ratings_query(movie_id=movie_id)
 
-    print("User ratings (0.0 - 5.0) for:")
-    print(f"\nTitle: {title} | Genres: {genres}\n")
-    print(df[['userId', 'rating']])
-    print(f"\nAvearge rating: {average}")
+    if len(df) > 0:
+        title = df['title'].iloc[0]
+        id = df['id'].iloc[0]
+        genres = df['genres'].iloc[0]
+        average = df['avg'].iloc[0]
+
+        print("User ratings (0.0 - 5.0) for:")
+        print(f"\nTitle: {title} ({id}) | Genres: {genres}\n")
+        print(df[['userId', 'rating']])
+        print(f"\nAvearge rating: {average}")
+    else:
+        print(f"Couldn't find any results for {movie_id}.")
 
 def refresh_command(db: Database) -> pd.DataFrame:
     """Placeholder for more involved refresh command if needed. Currently just returns input df."""
@@ -201,8 +204,7 @@ def stats_command(db: Database, cache_df: pd.DataFrame) -> None:
         genre_means = flat.groupby('genres')['vote_average'].mean()
         print("\n", pd.DataFrame({'Count': genre_counts, 'Avg Rating': genre_means}), "\n")
     elif input_str == "full":
-        query_str = "SELECT value AS genre, COUNT(*) AS count, AVG(vote_average) as avg FROM movies, json_each(genres) GROUP BY value"
-        cache_df = db.query_db(query_str)
+        cache_df = db.genre_stats_query()
         print(cache_df)
     else:
         print("That is not a valid command. Please try again.")

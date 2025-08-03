@@ -1,5 +1,6 @@
 from ast import literal_eval
 import json
+import os
 import os.path
 import pandas as pd
 import sqlite3
@@ -23,11 +24,16 @@ class Database:
             print("Generating DB. Please wait...")
             conn = sqlite3.connect(db_file)
 
-            movies_df = parse_data(pd.read_csv(movies_file, low_memory=False))
-            movies_df.to_sql('movies', conn, if_exists='replace')
-            
-            ratings_df = pd.read_csv(ratings_file, low_memory=False)
-            ratings_df.to_sql('ratings', conn, if_exists='replace')
+            try:
+                movies_df = parse_data(pd.read_csv(movies_file, low_memory=False))
+                movies_df.to_sql('movies', conn, if_exists='replace')
+                
+                ratings_df = pd.read_csv(ratings_file, low_memory=False)
+                ratings_df.to_sql('ratings', conn, if_exists='replace')
+            except FileNotFoundError:
+                conn.close()
+                os.remove(db_file)
+                raise
 
             conn.close()
         else:
@@ -41,19 +47,26 @@ class Database:
 
         return df
     
-    def ratings_query_builder(self, left_table='movies', right_table='ratings', left_join_key='id', right_join_key='movieId', join_type='INNER', movie_id='862') -> tuple:
-        return (f"""
-        SELECT m.title, m.genres, r.userId, r.rating 
+    def ratings_query(self, left_table='movies', right_table='ratings', left_join_key='id', right_join_key='movieId', join_type='INNER', movie_id='862', limit=0) -> pd.DataFrame:
+        """Easy to use query to get ratings information quickly. Returns DataFrame."""
+
+        return self.query_db_with_params(f"""
+        SELECT m.title, m.id, m.genres, r.userId, r.rating, AVG(r.rating) OVER() as avg
         FROM {left_table} m
         {join_type} JOIN {right_table} r
         ON m.{left_join_key} = r.{right_join_key}
         WHERE m.id = ?
-        """, (movie_id,))
+        """, (movie_id,), limit)
+
+    def genre_stats_query(self, table='movies', limit=0) -> pd.DataFrame:
+        """Easy to use query to get stats information quickly. Returns DataFrame."""
+
+        return self.query_db(f"SELECT value AS genre, COUNT(*) AS count, AVG(vote_average) AS avg FROM {table}, json_each(genres) GROUP BY value", limit)
 
     def query_db(self, query: str="SELECT title, id, genres, vote_average FROM movies", limit: int=100) -> pd.DataFrame:
         """Queries Database without any user input. If wanting to use user set params, use query_db_with_params() instead."""
 
-        if not "LIMIT" in query:
+        if not "LIMIT" in query and limit > 0:
             query += f" LIMIT {limit}"
 
         conn = sqlite3.connect(self.db_file)

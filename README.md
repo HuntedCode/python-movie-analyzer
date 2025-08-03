@@ -14,7 +14,7 @@ A command-line tool for analyzing movie data from a Kaggle dataset, allowing use
 1. Clone the repository:
    ```bash
    git clone https://github.com/HuntedCode/python-movie-analyzer.git
-   cd movie-analyzer
+   cd python-movie-analyzer
    ```
 2. Install dependencies (Python 3.8+ required):
    ```bash
