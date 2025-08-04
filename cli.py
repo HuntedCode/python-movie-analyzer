@@ -76,36 +76,17 @@ def filter_command(db: Database) -> pd.DataFrame:
         
         return rating_min, rating_max
         
-
     type = str(input("What would you like to filter? ('genre', 'rating' or 'both'): ")).lower()
-
-    query_str = "SELECT * FROM movies WHERE EXISTS ("
-    params = []
+    params = {}
 
     if type in ('genre', 'g', 'both', 'b'):
-        genres = get_genres()
-        query_str += "SELECT 1 FROM json_each(genres) WHERE "
-        pos = -1
-        for g in genres:
-            pos += 1
-            query_str += "value = ?"
-            params.append(g)
-            if pos < len(genres) - 1:
-                query_str += " OR "
-            else:
-                query_str += ")"
-        
-        if type in ('both', 'b'):
-            query_str += " AND ("
+        params['genres'] = get_genres() 
 
     if type in ('rating', 'r', 'both', 'b'):
-        rating_min, rating_max = get_ratings()
-        query_str += "vote_average BETWEEN ? AND ?)"
-        params.append(rating_min)
-        params.append(rating_max)
+        params['min_rating'], params['max_rating'] = get_ratings()
     
     if len(params) >= 1:
-        df = db.query_db_with_params(query_str, params)
+        df = db.filter_query(opt_params=params)
         view_command(df)
         return df
     else:
@@ -145,7 +126,7 @@ def ratings_command(db: Database) -> None:
     print("Get user ratings for specified movie.")
 
     try:
-        movie_id = input("Enter movie id: ")
+        movie_id = int(input("Enter movie id: "))
     except ValueError:
         print("That is not a valid movie id!")
         return

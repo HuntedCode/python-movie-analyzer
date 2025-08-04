@@ -39,14 +39,65 @@ class Database:
         else:
             print("DB Already Exists!")
 
+    def _filter_sql_builder(self, input_params: dict) -> tuple:
+        """Builds filter string that can be appended easily to any SQL statement."""
+
+        params = []
+
+        if 'genres' in input_params:
+            placeholders = ", ".join("?" for _ in input_params['genres'])
+            num_genres = len(input_params['genres'])
+            sql = f""" 
+                WHERE (
+                    SELECT COUNT(DISTINCT value)
+                    FROM json_each(genres)
+                    WHERE value IN ({placeholders})
+                ) >= {num_genres}
+                """
+            for g in input_params['genres']:
+                params.append(g)
+
+            if ('min_rating' in input_params and input_params['min_rating'] > 0.0) or ('max_rating' in input_params and input_params['max_rating'] < 10.0):
+                sql += " AND "
+        
+        if ('min_rating' in input_params and input_params['min_rating'] > 0.0) or ('max_rating' in input_params and input_params['max_rating'] < 10.0):
+            sql += "(vote_average >= ? AND vote_average <= ?)"
+            params.append(input_params['min_rating'])
+            params.append(input_params['max_rating'])
+        
+        return (sql, params,)
+
     def _format_df(self, df: pd.DataFrame) -> pd.DataFrame:
         """Formats data retrieved from db to allow easier manipulation later."""
 
         if 'genres' in df.columns:
             df['genres'] = df['genres'].apply(json.loads)
+        
+        if 'vote_average' in df.columns:
+            df = df.dropna(subset=['vote_average'])
 
         return df
-    
+
+    def filter_query(self, table='movies', limit=0, opt_params={}) -> pd.DataFrame:
+        """Easy to use query to filter dataset quickly. Returns DataFrame."""
+
+        sql = "SELECT title, id, genres, vote_average FROM movies"
+        filter_str, params = self._filter_sql_builder(opt_params)
+        return self.query_db_with_params(sql + filter_str, params, limit)
+
+    def genre_stats_query(self, table='movies', limit=0, opt_params={}) -> pd.DataFrame:
+        """Easy to use query to get stats information quickly. Returns DataFrame."""
+
+        sql = f"SELECT value AS genre, COUNT(*) AS count, AVG(vote_average) AS avg FROM {table}, json_each(genres)"
+
+        if len(opt_params) > 0:
+            filter_str, params = self._filter_sql_builder(opt_params)
+            sql += filter_str + " GROUP BY value"
+            return self.query_db_with_params(sql, params, limit)
+
+        sql += " GROUP BY value"
+        return self.query_db(sql, limit=limit)
+
     def ratings_query(self, left_table='movies', right_table='ratings', left_join_key='id', right_join_key='movieId', join_type='INNER', movie_id='862', limit=0) -> pd.DataFrame:
         """Easy to use query to get ratings information quickly. Returns DataFrame."""
 
@@ -58,31 +109,26 @@ class Database:
         WHERE m.id = ?
         """, (movie_id,), limit)
 
-    def genre_stats_query(self, table='movies', limit=0) -> pd.DataFrame:
-        """Easy to use query to get stats information quickly. Returns DataFrame."""
-
-        return self.query_db(f"SELECT value AS genre, COUNT(*) AS count, AVG(vote_average) AS avg FROM {table}, json_each(genres) GROUP BY value", limit)
-
-    def query_db(self, query: str="SELECT title, id, genres, vote_average FROM movies", limit: int=100) -> pd.DataFrame:
+    def query_db(self, sql: str="SELECT title, id, genres, vote_average FROM movies", limit: int=100) -> pd.DataFrame:
         """Queries Database without any user input. If wanting to use user set params, use query_db_with_params() instead."""
 
-        if not "LIMIT" in query and limit > 0:
-            query += f" LIMIT {limit}"
+        if not "LIMIT" in sql and limit > 0:
+            sql += f" LIMIT {limit}"
 
         conn = sqlite3.connect(self.db_file)
-        df = pd.read_sql_query(query, conn)
+        df = pd.read_sql_query(sql, conn)
         conn.close()
 
         return self._format_df(df)
 
-    def query_db_with_params(self, query: str="SELECT title, genres, vote_average FROM movies WHERE vote_average > ?", params=(7.0,), limit: int=100) -> pd.DataFrame:
+    def query_db_with_params(self, sql: str="SELECT title, genres, vote_average FROM movies WHERE vote_average > ?", params=(7.0,), limit: int=100) -> pd.DataFrame:
         """Queries Database using params to avoid SQL injection. Set limit=0 for no limit."""
 
-        if not "LIMIT" in query and limit > 0:
-            query += f" LIMIT {limit}"
+        if not "LIMIT" in sql and limit > 0:
+            sql += f" LIMIT {limit}"
             
         conn = sqlite3.connect(self.db_file)
-        df = pd.read_sql_query(query, conn, params=params)
+        df = pd.read_sql_query(sql, conn, params=params)
         conn.close()
 
         return self._format_df(df)

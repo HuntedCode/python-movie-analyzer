@@ -1,14 +1,16 @@
-# Movie Ratings Analyzer CLI
+# Enhanced Movie Ratings Dashboard
 
-A command-line tool for analyzing movie data from a Kaggle dataset, allowing users to filter, compute statistics, save/load results, and visualize genre trends. Built in Python as part of a self-taught career transition to remote data or backend roles.
+A Python-based tool for analyzing movie metadata and user ratings from Kaggle datasets. Features a command-line interface (CLI) for filtering, statistics, and visualizations, plus a Streamlit web dashboard for interactive exploration. Built as part of a 6-month self-taught Python career transition plan.
 
 ## Features
-- Load and parse movie data (titles, genres, ratings) from CSV/JSON files.
-- Filter movies by genre, rating range, or both (multi-genre support with OR logic).
-- Compute stats: Per-genre averages/counts.
-- Save filtered results to CSV/JSON and load back for further analysis.
-- Visualize genre counts as bar charts (saved as PNG).
-- Robust error handling for invalid files and user inputs.
+- **Data Loading**: Imports movie metadata (titles, genres, vote averages) and user ratings from CSV into SQLite for persistent storage.
+- **Filtering**: SQL-based filters for genres (multi-genre OR matching), rating ranges, or both.
+- **Statistics**: Genre-based counts and average ratings using SQL aggregations (json_each for multi-genres).
+- **Ratings Query**: Fetch user ratings for a specific movie via SQL joins, with average calculation.
+- **Visualizations**: Bar plots for genre counts, saved as PNG (Matplotlib).
+- **Save/Load**: Export/import filtered data to/from CSV/JSON.
+- **Web Dashboard**: Streamlit UI for dynamic filtering, data display, stats computation, and plotting.
+- **Error Handling**: Robust checks for file existence, invalid inputs, NaN values, and parsing errors.
 
 ## Installation
 1. Clone the repository:
@@ -18,40 +20,38 @@ A command-line tool for analyzing movie data from a Kaggle dataset, allowing use
    ```
 2. Install dependencies (Python 3.8+ required):
    ```bash
-   pip install pandas matplotlib
+   pip install pandas matplotlib streamlit
    ```
-3. Download the dataset: Use `movies_metadata.csv` from [Kaggle’s The Movies Dataset](https://www.kaggle.com/datasets/rounakbanik/the-movies-dataset) and place it in the project folder.
+   (SQLite is built-in; no additional install needed.)
+3. Download the datasets: Get `movies_metadata.csv` and `ratings.csv` from [Kaggle’s The Movies Dataset](https://www.kaggle.com/datasets/rounakbanik/the-movies-dataset). Place them in the project folder.
 
 ## Usage
-Run the app from the command line:
+### CLI Mode
+Run the CLI for console-based interaction:
 ```bash
 python main.py
 ```
+- Commands: `view` (display data), `filter` (genre/rating), `stats` (genre averages/counts), `plot` (genre bar chart), `ratings` (user ratings per movie), `save`/`load` (CSV/JSON), `refresh` (reload data), `help`, `exit`.
+- Example: Filter for "Drama" movies rated 7-9, compute stats, plot genres.
 
-Available commands:
-- `view`: Display current dataset (title, genres, rating).
-- `filter`: Filter by genre (e.g., “Comedy Drama”), rating range (e.g., 7-9), or both.
-- `stats`: Show mean rating, total ratings, and genre-based counts/averages.
-- `save`: Export current dataset to CSV/JSON (prompts for format).
-- `load`: Import CSV/JSON to append to current dataset.
-- `refresh`: Reset to original dataset (placeholder for future reload).
-- `plot`: Generate and save a bar chart of genre counts (genres.png).
-- `help`: List all commands.
-- `exit`: Quit the app.
+### Web Dashboard Mode
+Run the Streamlit dashboard for browser-based use:
+```bash
+streamlit run app.py
+```
+- Opens at http://localhost:8501.
+- Sidebar: Input genres (space-separated), slider for min/max rating.
+- Main page: Displays filtered data table, buttons for stats (dataframe) and plot (bar chart).
+- Example: Enter "Comedy Action", set ratings 8-10, click "Compute Stats" and "Generate Plot".
 
-Example session:
-1. Run `python main.py` to load movies_metadata.csv.
-2. `filter` by “Comedy” or ratings “7 to 9”.
-3. `stats` to see genre averages.
-4. `save` to “movies_filtered.csv”.
-5. `plot` to generate genres.png.
-6. `view` to check results.
-
-**Note**: For educational use only. Respects Kaggle’s dataset terms.
+**Note**: For educational use. Respects Kaggle terms—use datasets responsibly.
 
 ## Project Structure
-- `main.py`: Entry point, loads CSV and starts CLI.
-- `cli.py`: Handles user interface, commands, and data processing (Pandas).
+- `main.py`: CLI entry point.
+- `app.py`: Streamlit dashboard entry point.
+- `cli.py`: CLI commands and logic (filters, stats, plots).
+- `db.py`: SQLite database management (loading, queries, joins, aggregations).
+- `movies_metadata.csv` / `ratings.csv`: Kaggle input data (not in repo—download separately).
 
 ## Contributing
 Feedback welcome! Fork the repo, make changes, and submit a pull request. Report issues on GitHub.
@@ -59,4 +59,4 @@ Feedback welcome! Fork the repo, make changes, and submit a pull request. Report
 ## License
 MIT License—free to use and modify.
 
-Built by Jeffrey Lowe as part of a 6-month Python learning plan for remote coding jobs. Last updated: July 31, 2025.
+Built by Jeffrey Lowe as part of a 6-month Python learning plan for remote coding jobs. Last updated: August 5, 2025.
